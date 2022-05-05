@@ -13,6 +13,8 @@ Created on Wed Apr 20 21:11:17 2022
 import os
 import scipy.io as sio
 import numpy as np
+import time
+import test as t
 
 # Custom Modules
 import DataPreparation_Functions as DPF
@@ -48,13 +50,13 @@ ControllerGain_k = 10
 MasterNodeGain_b = 1.
 
 # Grid/Communication Network Constants
-# GridCommNetworkFailure_Percentage_Vector=[0.,10.,20.,30.,40.,50.,60.,70.,80.,90.,100.]
-GridCommNetworkFailure_Percentage_Vector=[0.,10.,20.]
+GridCommNetworkFailure_Percentage_Vector=[0.,10.,20.,30.,40.,50.,60.,70.,80.,90.,100.]
+# GridCommNetworkFailure_Percentage_Vector=[0.,30.,80.]
 
 # Time Constants
 TimeStart = 0.
 
-TimeEnd = 30.
+TimeEnd = 60.
 
 TimeDelta = 0.01
 
@@ -69,6 +71,9 @@ MasterControlNode_Initialization = 1 # [1 - Initialize B matrix with Identity Ma
 # Choosing Microgrid Plant Dynamics Type
 PlantDynamics_Type = 1 # [1 - Linear , 2 - Nonlinear]
 
+# Choosing ODE Solver Type 
+ODE_Solver_Type = 1 # [1 - Python In-Built , 2 - Custom Made]
+
 # Performance Computation Constants
 Percentage_limit = 10 
 
@@ -77,17 +82,19 @@ Threshold = 10e-10
 # Folder Paths to Grid and Communication Graphs Data
 
 # Grid/Communication Network Names List
-Grid_Name = "IEEE_13"
+Grid_Name = "IEEE_342"
 
-# Comm_Name= ['P100','P90','P80','P70','P60','P50','P40','P30','P20','P10']
-Comm_Name= ['P100','P90','P80']
-Comm_List = [0,1,2]
+Comm_Name= ['P_1','P_2','P_3','P_4','P_5','P_6','P_7','P_8','P_9','P_10','P_20','P_30','P_40','P_50','P_60','P_70','P_80','P_90','P_100']
+# Comm_Name= ['P_10','P_40','P_90'] # Debugger
+Comm_List = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]
+# Comm_List = [0,1,2]
+# Comm_List1 = [9,12,18] # Debugger
 
 
 # Ranking Methods Name
 Rank_Method_Name = ['Degree','PageRank','Eigenvalue_Analysis']
 
-GridCommData_FolderName = r"\IEEE_13" # IEEE_13 , IEEE_123, IEEE_342, IEEE_8500
+GridCommData_FolderName = r"\IEEE_342" # IEEE_13 , IEEE_123, IEEE_342, IEEE_8500
 
 if (User == "Ninad"):
     
@@ -101,7 +108,7 @@ elif (User == "Sajjad"):
     GridCommData_Path = r"C:\Users\sajjaduddin.mahmud\OneDrive - Washington State University (email.wsu.edu)\CPT_S_591_Spring2022\22_NetworkScience_Project\22_NetworkScience_Project\Preprocessed_Data"
 
     # Results Path
-    Result_Path = r"C:\Users\sajjaduddin.mahmud\TTest"
+    Result_Path = r"C:\Users\sajjaduddin.mahmud\ieee342"
     
 elif (User == "LabLaptop"):
 
@@ -142,6 +149,10 @@ Storage_Comm_Rank_array_list = []
 
 Storage_FrequencyResponse_BaseCase = []
 
+Storage_RankingMethod_ComputationalTime_list = []
+
+Storage_RankWise_CommFailure_Nodes_List = []
+
 # RankWise_CommFailure_Nodes_Vector, Grid_Rank_array_List, CommNetworkData_List
 # Storage_FrequencyResponse_GridNodeFailureCase = [[ [0 for col in range(len(GridCommNetworkFailure_Percentage_Vector))] for col in range(3)] for row in range(len(CommNetworkData_List))]
 
@@ -150,6 +161,37 @@ Storage_FrequencyResponse_BaseCase = []
 Storage_FrequencyResponse_GridNodeFailureCase = [[ [0 for col in range(len(GridCommNetworkFailure_Percentage_Vector))] for col in range(3)] for row in range(len(Comm_List))]
 
 Storage_FrequencyResponse_CommNodeFailureCase = [[ [0 for col in range(len(GridCommNetworkFailure_Percentage_Vector))] for col in range(3)] for row in range(len(Comm_List))]
+
+Storage_RankWise_CommFailure_Nodes_List = [ [0 for col in range(len(GridCommNetworkFailure_Percentage_Vector))] for col in range(3)]
+
+
+# =============================================================================
+# Compute Ranking for Grid Nodes
+# =============================================================================
+
+# Degree Centrality
+
+Grid_Degree_Rank_array = MRF.Get_ranking_degree(Adj_p)
+    
+
+# Page Rank
+
+Grid_PageRank_Rank_array = MRF.Get_ranking_pagerank(Adj_p)
+    
+
+# Eigen Value Analysis
+
+Grid_EigenAnalysis_Rank_array = MRF.Get_ranking_eigenanalysis(Adj_p,Lp)
+
+
+# Creating List for Rank Arrays
+Grid_Rank_array_List = [Grid_Degree_Rank_array,Grid_PageRank_Rank_array,Grid_EigenAnalysis_Rank_array]  
+
+# =============================================================================
+# Saving Ranking for Grid / Communication Nodes
+# =============================================================================
+Storage_Grid_Rank_array_list = [Grid_Degree_Rank_array,Grid_PageRank_Rank_array,Grid_EigenAnalysis_Rank_array]
+
 
 # =============================================================================
 # FOR LOOP: over all Communication Networks
@@ -161,7 +203,7 @@ for i in Comm_List:    # len(CommNetworkData_List)
     # =============================================================================    
 
     # Getting Current Communication Network Data
-    CommNetwork_Dict = CommNetworkData_List[i]  
+    CommNetwork_Dict = CommNetworkData_List[Comm_List[i]]  
     
     Adj_d = CommNetwork_Dict['Adj_Comm'] 
     
@@ -189,40 +231,65 @@ for i in Comm_List:    # len(CommNetworkData_List)
     # =============================================================================
     
     # Calling custom function to compute Master Node
-    MasterNode, ActualLinearSystem_Matrix = MCF.Compute_MasterNode_ActualLinearSystem (N,l,p,MachineInertaDamperConstant_z,ControllerGain_k,M_Vector,Lp,Ld,MasterControlNode_Algorithm,MasterControlNode_Initialization)    
+    MasterNode, ActualLinearSystem_Matrix, Eig_val_Base, Eig_LVec_Base, Eig_RVec_Base = MCF.Compute_MasterNode_ActualLinearSystem (N,l,p,MachineInertaDamperConstant_z,ControllerGain_k,M_Vector,Lp,Ld,MasterControlNode_Algorithm,MasterControlNode_Initialization)    
+
+    # Calling custom function to get Dominant Eigen Components
+    Dominant_EigenValue_Base  = MCF.Get_DominantEigenComponents(Eig_val_Base, Eig_LVec_Base, Eig_RVec_Base)
     
+    # Computing Real Parts of Dominant_EigenValue
+    Real_Dominant_EigenValue_Base = Dominant_EigenValue_Base[0].real
+    
+    # Compute Stability of the Current Microgrid Network
+    Stability_Status_Base = MPF.Microgrid_Plant_Stability(Eig_val_Base)      
     
     # =============================================================================
-    # Compute Ranking for Grid / Communication Nodes
+    # Compute Ranking for Communication Nodes
     # =============================================================================
     
     # Degree Centrality
-    Grid_Degree_Rank_array = MRF.Get_ranking_degree(Adj_p)
+        
+    start = time.time()
     
-    Comm_Degree_Rank_array = MRF.Get_ranking_degree(Adj_d)   
+    Comm_Degree_Rank_array = MRF.Get_ranking_degree(Adj_d)  
+    
+    end = time.time()
+    
+    ComputationalTime_Degree = (end-start)
 
     # Page Rank
-    Grid_PageRank_Rank_array = MRF.Get_ranking_pagerank(Adj_p)
+        
+    start = time.time()
     
     Comm_PageRank_Rank_array = MRF.Get_ranking_pagerank(Adj_d)    
     
+    end = time.time()
+    
+    ComputationalTime_PageRank = (end-start)
+    
     # Eigen Value Analysis
-    Grid_EigenAnalysis_Rank_array = MRF.Get_ranking_eigenanalysis(Adj_p,Lp)
+    
+    start = time.time()
     
     Comm_EigenAnalysis_Rank_array = MRF.Get_ranking_eigenanalysis(Adj_d,Ld) 
+    
+    end = time.time()
+    
+    ComputationalTime_EigenAnalysis = (end-start)
 
     # Creating List for Rank Arrays
-    Grid_Rank_array_List = [Grid_Degree_Rank_array,Grid_PageRank_Rank_array,Grid_EigenAnalysis_Rank_array]  
     
-    Comm_Rank_array_List = [Comm_Degree_Rank_array,Comm_PageRank_Rank_array,Comm_EigenAnalysis_Rank_array]
+    Comm_Rank_array_List = [Comm_Degree_Rank_array,Comm_PageRank_Rank_array,Comm_EigenAnalysis_Rank_array]   
+    
+    ComputationalTime_Rank_array_List = [ComputationalTime_Degree,ComputationalTime_PageRank,ComputationalTime_EigenAnalysis]
 
 
     # =============================================================================
     # Saving Ranking for Grid / Communication Nodes
     # =============================================================================
-    Storage_Grid_Rank_array_list = [Grid_Degree_Rank_array,Grid_PageRank_Rank_array,Grid_EigenAnalysis_Rank_array]
     
     Storage_Comm_Rank_array_list.append([Comm_Degree_Rank_array,Comm_PageRank_Rank_array,Comm_EigenAnalysis_Rank_array]) 
+
+    Storage_RankingMethod_ComputationalTime_list.append(ComputationalTime_Rank_array_List)
 
 
     # =============================================================================
@@ -234,19 +301,19 @@ for i in Comm_List:    # len(CommNetworkData_List)
     
     FailureNode = -1
 
-    AngleResponse_Grid_Matrix = MPF.Microgrid_Plant_TimeSimulation(InitialState_Vector,M_Vector,MachineInertaDamperConstant_z,NodePowerTransfer_T,MachineInverterCoefficient_G,ControllerGain_k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type)
+    AngleResponse_Grid_Matrix = MPF.Microgrid_Plant_TimeSimulation(ODE_Solver_Type,ActualLinearSystem_Matrix,InitialState_Vector,M_Vector,MachineInertaDamperConstant_z,NodePowerTransfer_T,MachineInverterCoefficient_G,ControllerGain_k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type)
 
            
     # =============================================================================
     # Compute Frerquency Response  Performance
     # =============================================================================
-    Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_timevector, Grid_Delta_dot_avg_time = MCF.Compute_Controller_FrequencyResponse_Performance(Percentage_limit, Threshold, Time_Vector, TimeDelta, AngleResponse_Grid_Matrix)
+    Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_avg_time = MCF.Compute_Controller_FrequencyResponse_Performance(Time_Vector, TimeDelta, AngleResponse_Grid_Matrix, NodeFailure_Type, FailureNode)
 
 
     # =============================================================================
     # Saving Frerquency Response  Performance - No Failure Case
     # =============================================================================
-    Storage_FrequencyResponse_BaseCase.append([Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_timevector, Grid_Delta_dot_avg_time])
+    Storage_FrequencyResponse_BaseCase.append([Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_avg_time, Real_Dominant_EigenValue_Base, Stability_Status_Base])
 
     # =============================================================================
     # FOR LOOP: over each Ranking method
@@ -273,6 +340,9 @@ for i in Comm_List:    # len(CommNetworkData_List)
         
         RankWise_CommFailure_Nodes_Vector = RankWise_CommFailure_Nodes_Vector.astype(int)
     
+        RankWise_CommFailure_Nodes_List = [RankWise_GridFailure_Nodes_Vector, RankWise_CommFailure_Nodes_Vector]
+
+        # Storage_RankWise_CommFailure_Nodes_List[i][j] = [RankWise_CommFailure_Nodes_List]
 
         # =============================================================================
         # FOR LOOP: over each failure node given by Ranking method - Grid Network
@@ -284,23 +354,39 @@ for i in Comm_List:    # len(CommNetworkData_List)
             
             # Getting Current Grid Failure Node
             FailureNode = RankWise_GridFailure_Nodes_Vector[k]
+            
+            
+            # =============================================================================
+            # Microgrid Failure Linear Matrix Computation        
+            # ============================================================================= 
+            AFL_System_Grid_Matrix ,Eig_val_AFL_Grid_Matrix , Eig_LVec_AFL_Grid, Eig_RVec_AFL_Grid = MCF.Compute_linearsystem_matrix_withFailure(N,l,p,MachineInertaDamperConstant_z,ControllerGain_k,M_Vector,Adj_p,Adj_d,MasterNode,NodeFailure_Type,FailureNode)
+            
+            # Calling custom function to get Dominant Eigen Components
+            Dominant_EigenValue_AFL_Grid  = MCF.Get_DominantEigenComponents(Eig_val_AFL_Grid_Matrix , Eig_LVec_AFL_Grid, Eig_RVec_AFL_Grid)
+            
+            # Computing Real Parts of Dominant_EigenValue
+            Real_Dominant_EigenValue_AFL_Grid = Dominant_EigenValue_AFL_Grid[0].real
+            
+            # Compute Stability of the Current Microgrid Network
+            Stability_Status_Grid = MPF.Microgrid_Plant_Stability(Eig_val_AFL_Grid_Matrix)            
+
         
             # =============================================================================
             # Microgrid Time-Simulation        
             # =============================================================================
-            AngleResponse_Grid_Matrix = MPF.Microgrid_Plant_TimeSimulation(InitialState_Vector,M_Vector,MachineInertaDamperConstant_z,NodePowerTransfer_T,MachineInverterCoefficient_G,ControllerGain_k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type)
+            AngleResponse_Grid_Matrix = MPF.Microgrid_Plant_TimeSimulation(ODE_Solver_Type,AFL_System_Grid_Matrix,InitialState_Vector,M_Vector,MachineInertaDamperConstant_z,NodePowerTransfer_T,MachineInverterCoefficient_G,ControllerGain_k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type)
             
             
             # =============================================================================
             # Compute Frerquency Response  Performance
             # =============================================================================
-            Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_timevector, Grid_Delta_dot_avg_time = MCF.Compute_Controller_FrequencyResponse_Performance(Percentage_limit, Threshold, Time_Vector, TimeDelta, AngleResponse_Grid_Matrix)
+            Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_avg_time = MCF.Compute_Controller_FrequencyResponse_Performance(Time_Vector, TimeDelta, AngleResponse_Grid_Matrix, NodeFailure_Type, FailureNode)
 
 
             # =============================================================================
             # Saving Frerquency Response  Performance - Grid Node Failure Case
             # =============================================================================
-            Storage_FrequencyResponse_GridNodeFailureCase[i][j][k]=[Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_timevector, Grid_Delta_dot_avg_time]
+            Storage_FrequencyResponse_GridNodeFailureCase[i][j][k]=[Grid_Delta_dot_mat, Grid_Delta_dot_avg, Grid_Delta_dot_avg_time, Real_Dominant_EigenValue_AFL_Grid, Stability_Status_Grid]
 
         # =============================================================================
         # FOR LOOP: over each failure node given by Ranking method - Communication Network
@@ -312,23 +398,39 @@ for i in Comm_List:    # len(CommNetworkData_List)
             
             # Getting Current Grid Failure Node
             FailureNode = RankWise_CommFailure_Nodes_Vector[k]
-        
+            
+            
+            # =============================================================================
+            # Microgrid Failure Linear Matrix Computation        
+            # ============================================================================= 
+            AFL_System_Comm_Matrix ,Eig_val_AFL_Comm_Matrix , Eig_LVec_AFL_Comm, Eig_RVec_AFL_Comm = MCF.Compute_linearsystem_matrix_withFailure(N,l,p,MachineInertaDamperConstant_z,ControllerGain_k,M_Vector,Adj_p,Adj_d,MasterNode,NodeFailure_Type,FailureNode)
+            
+            # Calling custom function to get Dominant Eigen Components
+            Dominant_EigenValue_AFL_Comm  = MCF.Get_DominantEigenComponents(Eig_val_AFL_Comm_Matrix , Eig_LVec_AFL_Comm, Eig_RVec_AFL_Comm)
+            
+            # Computing Real Parts of Dominant_EigenValue
+            Real_Dominant_EigenValue_AFL_Comm = Dominant_EigenValue_AFL_Comm[0].real
+            
+            # Compute Stability of the Current Microgrid Network
+            Stability_Status_Comm = MPF.Microgrid_Plant_Stability(Eig_val_AFL_Comm_Matrix)
+            
+            
             # =============================================================================
             # Microgrid Time-Simulation        
             # =============================================================================
-            AngleResponse_Comm_Matrix = MPF.Microgrid_Plant_TimeSimulation(InitialState_Vector,M_Vector,MachineInertaDamperConstant_z,NodePowerTransfer_T,MachineInverterCoefficient_G,ControllerGain_k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type)
+            AngleResponse_Comm_Matrix = MPF.Microgrid_Plant_TimeSimulation(ODE_Solver_Type,AFL_System_Comm_Matrix,InitialState_Vector,M_Vector,MachineInertaDamperConstant_z,NodePowerTransfer_T,MachineInverterCoefficient_G,ControllerGain_k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type)
             
             
             # =============================================================================
             # Compute Frerquency Response  Performance
             # =============================================================================   
-            Comm_Delta_dot_mat, Comm_Delta_dot_avg, Comm_Delta_dot_timevector, Comm_Delta_dot_avg_time = MCF.Compute_Controller_FrequencyResponse_Performance(Percentage_limit, Threshold, Time_Vector, TimeDelta, AngleResponse_Grid_Matrix)
+            Comm_Delta_dot_mat, Comm_Delta_dot_avg, Comm_Delta_dot_avg_time = MCF.Compute_Controller_FrequencyResponse_Performance(Time_Vector, TimeDelta, AngleResponse_Comm_Matrix, NodeFailure_Type, FailureNode)
 
 
             # =============================================================================
             # Saving Frerquency Response  Performance - Comm Node Failure Case
             # =============================================================================
-            Storage_FrequencyResponse_CommNodeFailureCase[i][j][k]=[Comm_Delta_dot_mat, Comm_Delta_dot_avg, Comm_Delta_dot_timevector, Comm_Delta_dot_avg_time]
+            Storage_FrequencyResponse_CommNodeFailureCase[i][j][k]=[Comm_Delta_dot_mat, Comm_Delta_dot_avg, Comm_Delta_dot_avg_time, Real_Dominant_EigenValue_AFL_Comm, Stability_Status_Comm]
 
 
 # =============================================================================
@@ -336,7 +438,7 @@ for i in Comm_List:    # len(CommNetworkData_List)
 # =============================================================================            
 
 # Calling Custom Function for Creating Tabulated Results
-Data_Frame_Table1, Data_Frame_Table2, Data_Frame_Table3 = DPF.Creating_ResultTable_MicrogridProject(Result_Path, Grid_Name , Comm_Name , Storage_Grid_Rank_array_list , Storage_Comm_Rank_array_list)
+Data_Frame_Table1, Data_Frame_Table2, Data_Frame_Table3 = DPF.Creating_ResultTable_MicrogridProject(Result_Path, Grid_Name , Comm_Name , Storage_Grid_Rank_array_list , Storage_Comm_Rank_array_list, Storage_RankingMethod_ComputationalTime_list)
 
 
 # =============================================================================
@@ -345,3 +447,5 @@ Data_Frame_Table1, Data_Frame_Table2, Data_Frame_Table3 = DPF.Creating_ResultTab
 
 # Calling Custom Function for Creating Graphs of Results
 DPF.Creating_Plots(Result_Path, Grid_Name, Comm_Name, Rank_Method_Name, GridCommNetworkFailure_Percentage_Vector, Time_Vector, Storage_FrequencyResponse_BaseCase , Storage_FrequencyResponse_GridNodeFailureCase , Storage_FrequencyResponse_CommNodeFailureCase)
+
+DPF.Creating_Plots1(Result_Path, Grid_Name, Comm_Name, Rank_Method_Name, GridCommNetworkFailure_Percentage_Vector, Time_Vector, Storage_FrequencyResponse_BaseCase , Storage_FrequencyResponse_GridNodeFailureCase , Storage_FrequencyResponse_CommNodeFailureCase)

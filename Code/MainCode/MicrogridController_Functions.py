@@ -41,6 +41,59 @@ def Compute_linearsystem_matrix(N,l,z,k,m,B,Lp,Ld):
     I_Nl_N = np.block([np.zeros((N-l,l)),np.eye(N-l)])
         
         
+    # Creating Z matrix
+    Dim_Z = N-l
+    Diag_values_Z = z
+    Z = HF.Get_diagonal_mat(Dim_Z, Diag_values_Z)
+        
+    
+    # Creating M inverse matrix
+    Dim_M = N-l
+    Diag_values_M = m
+    M = HF.Get_diagonal_mat(Dim_M, Diag_values_M)
+    M_inv = np.block([np.linalg.inv(M)])
+        
+    
+    # Creating close-loop matrix
+    X = Lp + np.matmul(K,Ld) + B
+    A11 = - np.matmul(I_l_N,X)
+    A12 = I_l_Nl
+    A21 = - np.matmul(M_inv,np.matmul(I_Nl_N,X))
+    A22 = - Z
+    
+    A = np.block([[A11,A12],[A21,A22]])
+        
+    
+    # computing eigenvalues and eigevectors of close-loop matrix
+    Eig_val_A, Eig_LVec_A, Eig_RVec_A = linalg.eig(A,left=True,right=True)
+
+    return A, Eig_val_A, Eig_LVec_A, Eig_RVec_A
+
+
+# =============================================================================
+# Computing Linear System Matrix and its Eigen Components with Failure
+# =============================================================================
+def Compute_linearsystem_matrix_withFailure(N,l,p,z,k,m,Adj_Grid,Adj_Comm,MasterNode,NodeFailure_Type,FailureNode):
+    
+    # creating K matrix
+    Dim_K = N
+    Diag_values_k = k
+    K = HF.Get_diagonal_mat(Dim_K, Diag_values_k)
+        
+    
+    # Creating I_l_N matrix
+    I_l_l = np.eye(l)
+    I_l_N = np.block([[I_l_l,np.zeros((l,N-l))],[np.zeros((N-l,l)),np.zeros((N-l,N-l))]])
+        
+
+    # Creating I_l_Nl matrix
+    I_l_Nl = np.block([[np.zeros((l,N-l))],[np.eye(N-l)]])
+        
+ 
+    # Creating I_Nl_N matrix
+    I_Nl_N = np.block([np.zeros((N-l,l)),np.eye(N-l)])
+        
+        
     # creating Z matrix
     Dim_Z = N-l
     Diag_values_Z = z
@@ -54,7 +107,77 @@ def Compute_linearsystem_matrix(N,l,z,k,m,B,Lp,Ld):
     M_inv = np.block([np.linalg.inv(M)])
         
     
+    # Creating B Matrix
+    B = np.zeros((l+p,l+p))
+    
+    B[MasterNode, MasterNode] = 1
+    
+    Adj_Grid_New = np.copy(Adj_Grid)
+    Adj_Comm_New = np.copy(Adj_Comm)
+    
+    # Modifying Laplacian Matrix
+    if NodeFailure_Type == 1:
+        
+        # Modifying B
+        if FailureNode == MasterNode:
+            B[MasterNode, MasterNode] = 0 
+        
+        # Modifying Grid Laplacian
+        Adj_Grid_New[:,FailureNode] = 0
+        Adj_Grid_New[FailureNode,:] = 0
+        
+        # Creating Grid Degree Matrix for New Adjacency Matrix
+        Degree_Grid_New = np.sum(Adj_Grid_New , axis=1)
+        Degree_Diag_Grid_New = np.eye(l+p)
+        Entries = np.diag_indices_from(Degree_Diag_Grid_New)
+        Degree_Diag_Grid_New[Entries] = Degree_Grid_New
+        
+        # Creating New Grid Laplacian Matrix
+        Laplacian_Grid_New = Degree_Diag_Grid_New - Adj_Grid_New
+        
+        # Modifying Comm Laplacian
+        Adj_Comm_New[:,FailureNode] = 0
+        Adj_Comm_New[FailureNode,:] = 0
+        
+        # Creating Comm Degree Matrix for New Adjacency Matrix
+        Degree_Comm_New = np.sum(Adj_Comm_New , axis=1)
+        Degree_Diag_Comm_New = np.eye(l+p)
+        Entries = np.diag_indices_from(Degree_Diag_Comm_New)
+        Degree_Diag_Comm_New[Entries] = Degree_Comm_New
+        
+        # Creating New Comm Laplacian Matrix
+        Laplacian_Comm_New = Degree_Diag_Comm_New - Adj_Comm_New
+        
+    elif NodeFailure_Type == 2:
+        
+        # Creating Grid Degree Matrix for New Adjacency Matrix
+        Degree_Grid_New = np.sum(Adj_Grid_New , axis=1)
+        Degree_Diag_Grid_New = np.eye(l+p)
+        Entries = np.diag_indices_from(Degree_Diag_Grid_New)
+        Degree_Diag_Grid_New[Entries] = Degree_Grid_New
+        
+        # Creating New Grid Laplacian Matrix
+        Laplacian_Grid_New = Degree_Diag_Grid_New - Adj_Grid_New        
+        
+        # Modifying Comm Laplacian
+        Adj_Comm_New[:,FailureNode] = 0
+        Adj_Comm_New[FailureNode,:] = 0
+        
+        # Creating Comm Degree Matrix for New Adjacency Matrix
+        Degree_Comm_New = np.sum(Adj_Comm_New , axis=1)
+        Degree_Diag_Comm_New = np.eye(l+p)
+        Entries = np.diag_indices_from(Degree_Diag_Comm_New)
+        Degree_Diag_Comm_New[Entries] = Degree_Comm_New
+        
+        # Creating New Comm Laplacian Matrix
+        Laplacian_Comm_New = Degree_Diag_Comm_New - Adj_Comm_New
+        
+    
+    
     # creating close-loop matrix
+    Lp = Laplacian_Grid_New
+    Ld = Laplacian_Comm_New
+    
     X = Lp + np.matmul(K,Ld) + B
     A11 = - np.matmul(I_l_N,X)
     A12 = I_l_Nl
@@ -261,7 +384,7 @@ def Compute_MasterNode_ActualLinearSystem (N,l,p,z,k,m,Lp,Ld,MethodType1, Method
         ActualLinearSystem_Matrix, Eig_val_Current, Eig_LVec_Current, Eig_RVec_Current = Compute_linearsystem_matrix(N,l,z,k,m,B_MasterNode,Lp,Ld)          
             
     # Return Master Node and Actual Linear System Matrix
-    return MasterNode, ActualLinearSystem_Matrix
+    return MasterNode, ActualLinearSystem_Matrix, Eig_val_Current, Eig_LVec_Current, Eig_RVec_Current
 
 
 # =============================================================================
@@ -475,119 +598,112 @@ def Compute_Controller_Command(x,Adj_d,k,MasterNode, l, p, FailureNode, NodeFail
 # =============================================================================
 # Function: Compute Controller Frequency Rersponse performance
 # =============================================================================
-def Compute_Controller_FrequencyResponse_Performance(Percentage_limit, Threshold, Timevector, Del_t, Delta_mat):
+def Compute_Controller_FrequencyResponse_Performance( Timevector, Del_t, Delta_mat, NodeFailure_Type, FailureNode):
    
-    # Computing delta_dot matrix from delta matrix
-    row , column = Delta_mat.shape
-    
-    Delta_dot_mat_row = row - 1
-    
-    Delta_dot_mat = np.zeros((Delta_dot_mat_row,column))
-    
-    for i in range(column):
+   Stability_Status = 1 
+   
+   # IF LOOP: Checking Stability Status 
+   if Stability_Status == 0:
         
-        Delta_i = Delta_mat[:,i]
+       Delta_dot_mat = np.NaN
         
-        for j in range(row):
+       Delta_dot_avg = np.NaN
+        
+       Delta_dot_avg_time = np.NaN
+        
+   elif Stability_Status == 1:
+        
+        if NodeFailure_Type == 0 or NodeFailure_Type == 2:
             
-            if (j+1) < row:
+            # Computing delta_dot matrix from delta matrix
+             row , column = Delta_mat.shape
+             
+             Delta_dot_mat_row = row - 1
+             
+             Delta_dot_mat = np.zeros((Delta_dot_mat_row,column))
+             
+             for i in range(column):
+                 
+                 Delta_i = Delta_mat[:,i]
+                 
+                 for j in range(row):
+                     
+                     if (j+1) < row:
+                         
+                        Slope_j = (Delta_i[j+1] -Delta_i[j])/Del_t
+                        Delta_dot_mat[j,i] = Slope_j
+                         
+             Delta_dot_avg = np.sum(Delta_dot_mat,axis=1)/column
+               
+             Delta_dot_avg_absolute = np.absolute(Delta_dot_avg)
+               
+             Delta_dot_avg_absolute_mean = np.mean(Delta_dot_avg_absolute)
                 
-                Slope_j = (Delta_i[j+1] -Delta_i[j])/Del_t
-                Delta_dot_mat[j,i] = Slope_j
-                
-    Delta_dot_avg = np.sum(Delta_dot_mat,axis=1)/column
-    
-    # Creating delta_dot_threshold matrix
-    Delta_dot_threshold_mat = np.zeros((Delta_dot_mat_row,column))
-    
-    Delta_dot_avg_threshold_mat = np.zeros((Delta_dot_mat_row,))
-    
-    for i in range(column):
-        
-        for j in range(Delta_dot_mat_row):
+             # Finding the Intersection Point from End Side
+                    
+             # FOR LOOP: To find the Time Value for the Intersection Point
+             ll = len(Delta_dot_avg_absolute)
+             
+             for i in range(ll):
+                 
+                 ii = ll - i - 1
+                 
+                 if Delta_dot_avg_absolute[ii] > Delta_dot_avg_absolute_mean:
+                     
+                     Timevector_index = ii
+                     
+                     break
+                 
+             Delta_dot_avg_time = Timevector[Timevector_index]                                     
+         
+        elif NodeFailure_Type == 1:            
+             
+            # Computing delta_dot matrix from delta matrix
+             Delta_mat = np.delete(Delta_mat, FailureNode, 1)
             
-            if Delta_dot_mat[j,i] <= Threshold:
-                
-                Delta_dot_threshold_mat[j,i] = 1
-                
-    for i in range(Delta_dot_mat_row):
-        
-        if Delta_dot_avg[i] <= Threshold:
+             row , column = Delta_mat.shape
+             
+             Delta_dot_mat_row = row - 1
+             
+             Delta_dot_mat = np.zeros((Delta_dot_mat_row,column))
+             
+             for i in range(column):
+                 
+                 Delta_i = Delta_mat[:,i]
+                 
+                 for j in range(row):
+                     
+                     if (j+1) < row:
+                         
+                         Slope_j = (Delta_i[j+1] -Delta_i[j])/Del_t
+                         Delta_dot_mat[j,i] = Slope_j
+                         
+             Delta_dot_avg = np.sum(Delta_dot_mat,axis=1)/column
+             
+             Delta_dot_avg_absolute = np.absolute(Delta_dot_avg)
+             
+             Delta_dot_avg_absolute_mean = np.mean(Delta_dot_avg_absolute)
+             
+             # Finding the Intersection Point from End Side
+             
+             # FOR LOOP: To find the Time Value for the Intersection Point
+             ll = len(Delta_dot_avg_absolute)
+             
+             for i in range(ll):
+                 
+                 ii = ll - i - 1
+                 
+                 if Delta_dot_avg_absolute[ii] > Delta_dot_avg_absolute_mean:
+                     
+                     Timevector_index = ii
+                     
+                     break
+                 
+             Delta_dot_avg_time = Timevector[Timevector_index]
+
+
             
-            Delta_dot_avg_threshold_mat[i] = 1
-            
-    # Finding time score 
-    Limit = Timevector[-1] / Del_t * Percentage_limit / 100 
-    
-    Delta_dot_timevector = np.zeros((column,))
-    
-    Delta_dot_avg_time = np.zeros((1,))
-    
-    # Time score for threshold      
-    for i in range(column):
-        
-        Counter1 = 0
-        
-        Counter2 = 0
-    
-        for j in range(Delta_dot_mat_row):
-            
-            Counter2 += 1
-            
-            jj = Delta_dot_mat_row-1-j
-            
-            if Delta_dot_threshold_mat[jj,i] == 1:
-                
-                Counter1 += 1
-                
-            if Counter1 != Counter2:
-                
-                # Counter = Counter1
-                
-                break
-            
-        if Counter1 < Limit:
-            
-            Delta_dot_timevector[i] = np.NaN
-            
-        else:
-            
-            Timevector_index = len(Timevector) - Counter1
-            
-            Delta_dot_timevector[i] = Timevector[Timevector_index]
-                
-    # Time score for average threshold    
-    Counter1 = 0
-    
-    Counter2 = 0
-    
-    for j in range(Delta_dot_mat_row):
-        
-        Counter2 += 1
-        
-        jj = Delta_dot_mat_row-1-j
-        
-        if Delta_dot_avg_threshold_mat[jj] == 1:
-            
-            Counter1 += 1
-            
-        if Counter1 != Counter2:
-            
-            # Counter = Counter1
-            
-            break
-        
-    if Counter1 < Limit:
-        
-        Delta_dot_avg_time = np.NaN
-        
-    else:
-        
-        Timevector_index = len(Timevector) - Counter1
-        
-        Delta_dot_avg_time = Timevector[Timevector_index]
-            
-    return Delta_dot_mat, Delta_dot_avg, Delta_dot_timevector, Delta_dot_avg_time
+   return Delta_dot_mat, Delta_dot_avg, Delta_dot_avg_time
 
  
      

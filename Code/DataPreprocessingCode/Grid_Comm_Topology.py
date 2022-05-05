@@ -10,20 +10,22 @@ import scipy.io as sio
 import networkx as nx
 import functions as fn
 
-fn.banner()
+# fn.banner()
 
 # =============================================================================
 # creating file name to be saved
 # =============================================================================
-DG_dict_file_name = 'IEEE_8500_DG' 
-Comm_dict_file_name = 'IEEE_8500_Comm_P' 
+DG_dict_file_name = 'IEEE_13_DG' 
+Comm_dict_file_name = 'IEEE_13_Comm_P' 
 
-probability_list = [1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+# Probability_list = [1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+
+Probability_list = [1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.09,0.08,0.07,0.06,0.05,0.04,0.03,0.02,0.01]
 
 # =============================================================================
 # reading IEEE Line Data
 # =============================================================================
-excel_data = pd.read_excel (r'C:\Users\sajjaduddin.mahmud\OneDrive - Washington State University (email.wsu.edu)\CPT_S_591_Spring2022\22_NetworkScience_Project\22_NetworkScience_Project\Sajjad\IEEE Line Data\Line_Data_IEEE8500.xls')
+excel_data = pd.read_excel (r'C:\Users\Rifat Tashnia\Desktop\NSP\DataPreprocessingCode\Line_Data_IEEE13.xls')
 
 list_A = excel_data['Node A'].tolist()
 list_B = excel_data['Node B'].tolist()
@@ -102,8 +104,8 @@ sio.savemat(DG_dict_file_name,IEEE_data_dict)
 # Communication network
 # =============================================================================
 
-for i in range(len(probability_list)):
-    p = probability_list[i]
+for i in range(len(Probability_list)):
+    p = Probability_list[i]
 
     # =============================================================================
     # creating communication network

@@ -63,15 +63,16 @@ def Get_ranking_eigenanalysis(Adjacency_matrix, Laplacian_matrix):
      
      
     # Getting Lambda2 - the |real eigenvalue| closest to zero
-    New=[]
-    for i in range(len(Abs_eigenvalue)): 
-        if Abs_eigenvalue[i] <= 10e-15:
-            Abs_eigenvalue[i] = 0
-        if Abs_eigenvalue[i] != 0: 
-            New.append(Abs_eigenvalue[i])
+    New=Abs_eigenvalue_list
+    # for i in range(len(Abs_eigenvalue)): 
+    #     if Abs_eigenvalue[i] <= 10e-15:
+    #         Abs_eigenvalue[i] = 0
+    #         New.append(Abs_eigenvalue[i])
+    #     if Abs_eigenvalue[i] != 0: 
+    #         New.append(Abs_eigenvalue[i])
     New.sort()
     New = np.array(New)
-    Lambda2_value = float(New[:1])
+    Lambda2_value = float(New[1])
     Lambda2_index = Abs_eigenvalue_list.index(Lambda2_value)
     # print(Right_eigenvector)
 

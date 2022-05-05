@@ -31,13 +31,11 @@ import numpy as np
 # creating unique list
 # =============================================================================
 def Get_unique_list(Numbers):
-    Unique_number_list = []
-    Numbers = str(Numbers)
-    Unique_numbers = set(Numbers) #converting list into set
-    for Number in Unique_numbers:
-        Unique_number_list.append(Number)
-    Unique_number_list.sort()    #sorting in ascending order
-    return Unique_number_list
+    Unique_numbers = set(Numbers) # converting list into set
+    Unique_numbers = list(Unique_numbers)
+    Unique_numbers.sort()
+    
+    return Unique_numbers
 
 
 

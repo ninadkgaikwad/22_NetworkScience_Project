@@ -11,6 +11,7 @@ Created on Sat Apr 23 12:41:10 2022
 
 # External Modules
 import numpy as np
+import scipy.signal as ss
 
 # Custom Modules
 import MicrogridController_Functions as MCF
@@ -303,49 +304,126 @@ def Compute_NextStep_RungeKutta_4thOrder(x,u,M,z,T,G,Adj_p,PlantDynamics_Type, l
     
     # Return next step
     return x_next
+
+
+# =============================================================================
+# Microgrid Plant Function
+# =============================================================================            
+def Microgrid_Plant_Stability(EigenValues_Vector):
+
+    #FOR LOOP: Computing Stability by checking negativity of the real parts of Eigen Value
+    for i in range(len(EigenValues_Vector)):
+        
+        # Getting Current Eigen Value real part
+        Eig_Value = EigenValues_Vector[i].real
+        
+        # IF ELSE LOOP: For segregating non-positive and positive values
+        if (Eig_Value>0):
             
-    
+            Stability_Status = 0
+            
+            break
+            
+        else:
+            
+            Stability_Status = 1
+            
+    # Returning Stability Status
+    return Stability_Status
+
 
 # =============================================================================
 # Microgrid Plant Function
 # =============================================================================
-def Microgrid_Plant_TimeSimulation(x_Ini,M,z,T,G,k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type):
+def Microgrid_Plant_TimeSimulation(ODE_Solver_Type,A_LinearSystem_Matrix,x_Ini,M,z,T,G,k,Adj_p,Adj_d,FailureNode,Time_Vector,TimeDelta,NodeFailure_Type,N,p,l,MasterNode,PlantDynamics_Type):
+
+    Stability_Status = 1    
+
+    # IF ELIF LOOP: For segregating based on stability of the Micrgrid Network    
+    if (Stability_Status == 0): # Unstable
     
-    # Getting Time Vector Length
-    Time_Vector_Len = Time_Vector.size
+        AngleResponse_Matrix = np.NaN
     
-    # Initializing State Vector
-    x = np.zeros((Time_Vector_Len+1,N+p))    
-      
-    # Initializing State Vector with Initial State vector
-    x[0,:] = x_Ini
+    elif (Stability_Status == 1): # Stable
     
-    # Initializing Control Command Vector
-    u = np.zeros((Time_Vector_Len,N+p))    
+        # IF ELIF LOOP: For segregating between ODE Solver Type
+        if (ODE_Solver_Type == 1): # Using Python in-built ODE Solver
     
-    # FOR LOOP: over each element in Time Vector
-    for i in range(Time_Vector_Len):
-        
-        # Getting Current State Vector
-        x_0 = x[i,:]
             
-        # Calling custom function for computing control command vector
-        u_0_Vec = MCF.Compute_Controller_Command(x_0,Adj_d,k,MasterNode, l, p, FailureNode, NodeFailure_Type)
+            ## Initial Condition
+            r,c = A_LinearSystem_Matrix.shape
+            
+            Time_Len = len(Time_Vector)
+            
+            # IF ELIF LOOP: For segregating Failure Type
+            if ((NodeFailure_Type == 0) or (NodeFailure_Type == 2)): # No Node Failure or Comm node failure
+            
+                x_ini = x_Ini
+            
+            elif (NodeFailure_Type == 1): # Grid Node Failure
+            
+                x_ini = x_Ini
                 
-        # Storing Control Command Vector
-        u[i,:] = u_0_Vec   
-         
-        # Calling custom function for computing next state vector
-        x_next_Vec = Compute_NextStep_RungeKutta_4thOrder(x_0,u_0_Vec,M,z,T,G,Adj_p,PlantDynamics_Type, l, p,TimeDelta, FailureNode, NodeFailure_Type)    
+                x_ini[FailureNode] = 0
             
-        # Storing next state Vector
-        x[i+1,:] = x_next_Vec 
+            u = np.zeros((Time_Len,r))
+            
+            ## Creating Linear System
+            
+            A_Sys = A_LinearSystem_Matrix
+            
+            B_Sys = np.zeros((r,r))
+            
+            C_Sys = np.eye(r)
+            
+            D_Sys = np.zeros((r,r))
+            
+            System = (A_Sys, B_Sys, C_Sys, D_Sys)
+            
+            ## Simulating System
+            
+            tout, y, x = ss.lsim(System, u, Time_Vector, x_ini)
+            
+            AngleResponse_Matrix = y[:,range(l+p)] 
+            
         
-        # Getting Angle Respone Matrix               
-        AngleResponse_Matrix = x[:,range(N)]
+        elif (ODE_Solver_Type == 2): # Using Custom made ODE Solver
         
-        # Debugger
-        print(i)
+            # Getting Time Vector Length
+            Time_Vector_Len = Time_Vector.size
+            
+            # Initializing State Vector
+            x = np.zeros((Time_Vector_Len+1,N+p))    
+              
+            # Initializing State Vector with Initial State vector
+            x[0,:] = x_Ini
+            
+            # Initializing Control Command Vector
+            u = np.zeros((Time_Vector_Len,N+p))    
+            
+            # FOR LOOP: over each element in Time Vector
+            for i in range(Time_Vector_Len):
+                
+                # Getting Current State Vector
+                x_0 = x[i,:]
+                    
+                # Calling custom function for computing control command vector
+                u_0_Vec = MCF.Compute_Controller_Command(x_0,Adj_d,k,MasterNode, l, p, FailureNode, NodeFailure_Type)
+                        
+                # Storing Control Command Vector
+                u[i,:] = u_0_Vec   
+                 
+                # Calling custom function for computing next state vector
+                x_next_Vec = Compute_NextStep_RungeKutta_4thOrder(x_0,u_0_Vec,M,z,T,G,Adj_p,PlantDynamics_Type, l, p,TimeDelta, FailureNode, NodeFailure_Type)    
+                    
+                # Storing next state Vector
+                x[i+1,:] = x_next_Vec 
+                
+                # Getting Angle Respone Matrix               
+                AngleResponse_Matrix = x[:,range(N)]
+                
+                # Debugger
+                print(i)
             
     # Return Angle Response Matrix
     return AngleResponse_Matrix 
